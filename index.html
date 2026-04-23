@@ -131,12 +131,23 @@
                     <div id="flash"
                         class="absolute inset-0 bg-white opacity-0 pointer-events-none z-50 transition-opacity duration-75">
                     </div>
+                    <div id="live-badge"
+                        class="hidden absolute top-3 right-3 z-50 flex items-center gap-1 bg-red-500 text-white text-xs font-black px-2 py-1 rounded-full shadow-lg">
+                        <span class="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-red-300 opacity-75"></span>
+                        <span class="relative">● LIVE</span>
+                    </div>
                 </div>
 
-                <button id="btn-capture" onclick="takePicture()"
-                    class="w-full bg-green-500 text-white py-4 rounded-2xl font-black text-xl shadow-lg shadow-green-200 active:scale-95 transition mb-6 hidden">
-                    📸 <span id="txt-scan-now">สแกนเลย!</span>
-                </button>
+                <div class="flex gap-2 mb-3">
+                    <button id="btn-capture" onclick="takePicture()"
+                        class="flex-1 bg-green-500 text-white py-4 rounded-2xl font-black text-xl shadow-lg shadow-green-200 active:scale-95 transition hidden">
+                        📸 <span id="txt-scan-now">สแกนเลย!</span>
+                    </button>
+                    <button id="btn-realtime" onclick="toggleRealtime()"
+                        class="flex-1 bg-gray-700 text-white py-4 rounded-2xl font-black text-base shadow-md active:scale-95 transition hidden">
+                        🔴 <span id="txt-realtime">Real-time</span>
+                    </button>
+                </div>
 
                 <div id="controls" class="flex gap-2 mb-4 opacity-50 pointer-events-none">
                     <button onclick="retake()"
@@ -150,22 +161,9 @@
                     </label>
                 </div>
 
-                <div id="result-box"
-                    class="p-5 rounded-2xl text-center bg-gray-50 min-h-[110px] flex flex-col justify-center">
-                    <p id="label" class="text-2xl font-black text-gray-800 uppercase tracking-tight">---</p>
-                    <p id="bin-advice" class="mt-1 font-bold text-lg"></p>
-                    <div id="fact-card" class="hidden card-in mt-3 bg-white rounded-xl p-3 text-left border border-gray-100 shadow-sm">
-                        <p class="text-xs font-bold text-gray-400 uppercase tracking-wide">
-                            ⏳ <span id="txt-fact-label">ระยะย่อยสลาย</span>
-                        </p>
-                        <p id="fact-text" class="text-sm font-semibold text-gray-700 mt-1 leading-relaxed"></p>
-                    </div>
-                    <div id="advice-card" class="hidden card-in mt-2 bg-white rounded-xl p-3 text-left border border-gray-100 shadow-sm">
-                        <p class="text-xs font-bold text-gray-400 uppercase tracking-wide">
-                            💡 <span id="txt-advice-label">วิธีทิ้งที่ถูกต้อง</span>
-                        </p>
-                        <p id="advice-text" class="text-sm text-gray-600 mt-1 leading-relaxed"></p>
-                    </div>
+                <div id="result-box" class="rounded-2xl bg-gray-50 min-h-[80px]">
+                    <p id="label" class="text-center text-base font-black text-gray-400 py-4">---</p>
+                    <div id="items-container" class="hidden space-y-2 px-3 pb-3"></div>
                 </div>
             </div>
         </div>
@@ -216,7 +214,7 @@
                 scanNow: "สแกนเลย!", retakeBtn: "ถ่ายใหม่", uploadBtn: "เลือกรูป",
                 cameraDenied: "กรุณาอนุญาตการใช้กล้อง", cameraError: "ไม่สามารถเข้าถึงกล้องได้",
                 classifyError: "วิเคราะห์ไม่สำเร็จ ลองใหม่อีกครั้ง", apiKeyMissing: "กรุณาใส่ Groq API Key",
-                factLabel: "ระยะย่อยสลาย", adviceLabel: "วิธีทิ้งที่ถูกต้อง",
+                factLabel: "ระยะย่อยสลาย", adviceLabel: "วิธีทิ้งที่ถูกต้อง", realtime: "Real-time",
                 xpGain: "+{n} XP", levelUp: "เลื่อนระดับ! ยินดีด้วย 🎉", newBest: "สถิติใหม่! 🏆"
             },
             en: {
@@ -261,8 +259,9 @@
         // ── State ─────────────────────────────────────────────────────────────
         let totalXP = 0, bestScore = 0;
         let groqApiKey = '';
-        let currentResult = null;
+        let currentResults = [];
         let isAnalyzing = false;
+        let isRealtime = false, realtimeTimer = null;
         let video, canvas;
         let score = 0, lives = 3, currentItem;
 
@@ -328,17 +327,23 @@
         const GROQ_MODEL   = 'meta-llama/llama-4-scout-17b-16e-instruct';
         const RETRY_DELAYS = [15, 30, 60]; // seconds between retries
 
-        const GROQ_PROMPT = `วิเคราะห์วัตถุในภาพนี้ว่าเป็นขยะประเภทใด ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น:
+        const GROQ_PROMPT = `วิเคราะห์วัตถุทุกชิ้นที่มองเห็นชัดในภาพ (สูงสุด 5 ชิ้น) ว่าเป็นขยะประเภทใด ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น:
 {
-  "found": true หรือ false,
-  "name_th": "ชื่อวัตถุภาษาไทย",
-  "name_en": "object name in English",
-  "bin": "yellow" หรือ "green" หรือ "blue" หรือ "red",
-  "fact_th": "ข้อเท็จจริงสั้นๆ เกี่ยวกับระยะเวลาย่อยสลาย 1 ประโยค",
-  "fact_en": "one sentence decomposition fact",
-  "advice_th": "คำแนะนำวิธีเตรียมหรือทิ้งให้ถูกต้อง 1 ประโยค",
-  "advice_en": "one sentence disposal tip"
+  "items": [
+    {
+      "name_th": "ชื่อวัตถุภาษาไทย",
+      "name_en": "object name in English",
+      "bin": "yellow" หรือ "green" หรือ "blue" หรือ "red",
+      "fact_th": "ข้อเท็จจริงสั้นๆ เกี่ยวกับระยะเวลาย่อยสลาย 1 ประโยค",
+      "fact_en": "one sentence decomposition fact",
+      "advice_th": "คำแนะนำวิธีเตรียมหรือทิ้งให้ถูกต้อง 1 ประโยค",
+      "advice_en": "one sentence disposal tip"
+    }
+  ]
 }
+
+ข้อห้าม: ห้ามรวม คน มนุษย์ สัตว์ ส่วนต่างๆ ของร่างกาย หรือสิ่งมีชีวิตใดๆ ลงใน items เด็ดขาด
+ถ้าไม่พบวัตถุ/ขยะชัดเจน (มีแต่คนหรือสัตว์) ให้ตอบ {"items": []}
 
 กฎการแยกถัง:
 - yellow = รีไซเคิล (ขวดแก้ว ขวดพลาสติกสะอาด กระป๋องโลหะ กระดาษ กล่องกระดาษ)
@@ -396,7 +401,8 @@
                 }
 
                 const data = await res.json();
-                return JSON.parse(data.choices[0].message.content);
+                const parsed = JSON.parse(data.choices[0].message.content);
+                return Array.isArray(parsed.items) ? parsed.items : [];
             }
 
             throw new Error('Rate limit — ลองใหม่อีกสักครู่');
@@ -420,6 +426,7 @@
                 video.onloadedmetadata = () => {
                     document.getElementById('loading-container').classList.add('hidden');
                     document.getElementById('btn-capture').classList.remove('hidden');
+                    document.getElementById('btn-realtime').classList.remove('hidden');
                     document.getElementById('controls').classList.remove('opacity-50', 'pointer-events-none');
                     document.getElementById('label').innerText = i18n[currentLang].ready;
                 };
@@ -467,87 +474,128 @@
             video.classList.remove('hidden');
             document.getElementById('btn-capture').classList.remove('hidden');
             document.getElementById('label').innerText = i18n[currentLang].ready;
-            currentResult = null;
+            currentResults = [];
             resetResultBox();
         }
 
         function resetResultBox() {
-            document.getElementById('result-box').className =
-                'p-5 rounded-2xl text-center bg-gray-50 min-h-[110px] flex flex-col justify-center';
-            document.getElementById('bin-advice').innerText = '';
-            document.getElementById('fact-card').classList.add('hidden');
-            document.getElementById('advice-card').classList.add('hidden');
+            document.getElementById('label').innerText = '---';
+            document.getElementById('label').classList.remove('hidden');
+            const container = document.getElementById('items-container');
+            container.innerHTML = '';
+            container.classList.add('hidden');
         }
 
         async function runAnalysis(base64, mimeType) {
             isAnalyzing = true;
-            document.getElementById('analyzing-overlay').classList.remove('hidden');
-            document.getElementById('controls').classList.add('opacity-50', 'pointer-events-none');
-            document.getElementById('label').innerText = i18n[currentLang].analyzing;
-            document.getElementById('bin-advice').innerText = '';
+            if (isRealtime) {
+                document.getElementById('live-badge').classList.remove('hidden');
+            } else {
+                document.getElementById('analyzing-overlay').classList.remove('hidden');
+                document.getElementById('controls').classList.add('opacity-50', 'pointer-events-none');
+                document.getElementById('label').innerText = i18n[currentLang].analyzing;
+            }
 
             try {
-                const result = await classifyWithGroq(base64, mimeType);
-                if (result) {
-                    currentResult = result;
-                    displayResult(result);
-                }
+                const items = await classifyWithGroq(base64, mimeType);
+                currentResults = items;
+                if (!isRealtime && items.length > 0) addXP(items.length * 10);
+                displayResults(items);
             } catch (e) {
-                showToast(`${i18n[currentLang].classifyError}: ${e.message}`, 'error');
-                document.getElementById('label').innerText = '---';
+                if (!isRealtime) {
+                    showToast(`${i18n[currentLang].classifyError}: ${e.message}`, 'error');
+                    document.getElementById('label').innerText = '---';
+                }
             } finally {
                 isAnalyzing = false;
-                document.getElementById('analyzing-overlay').classList.add('hidden');
-                document.getElementById('controls').classList.remove('opacity-50', 'pointer-events-none');
+                document.getElementById('live-badge').classList.add('hidden');
+                if (!isRealtime) {
+                    document.getElementById('analyzing-overlay').classList.add('hidden');
+                    document.getElementById('controls').classList.remove('opacity-50', 'pointer-events-none');
+                }
             }
         }
 
-        function displayResult(result) {
-            if (!result.found) {
-                document.getElementById('label').innerText = i18n[currentLang].unsure;
-                resetResultBox();
+        const BIN_CONFIG = {
+            yellow: { bg: 'bg-yellow-50', border: 'border-yellow-200', badge: 'bg-yellow-400', text: 'text-yellow-900' },
+            green:  { bg: 'bg-green-50',  border: 'border-green-200',  badge: 'bg-green-500',  text: 'text-green-900'  },
+            blue:   { bg: 'bg-blue-50',   border: 'border-blue-200',   badge: 'bg-blue-500',   text: 'text-blue-900'   },
+            red:    { bg: 'bg-red-50',    border: 'border-red-200',    badge: 'bg-red-500',    text: 'text-red-900'    },
+        };
+
+        function displayResults(items) {
+            const label = document.getElementById('label');
+            const container = document.getElementById('items-container');
+            const t = i18n[currentLang];
+
+            if (!items || items.length === 0) {
+                label.innerText = t.unsure;
+                label.classList.remove('hidden');
+                container.innerHTML = '';
+                container.classList.add('hidden');
                 return;
             }
 
-            const name = currentLang === 'th' ? result.name_th : result.name_en;
-            document.getElementById('label').innerText = name;
-            updateResultBox(result.bin);
-            showFactAdvice(result);
-            addXP(10);
-        }
+            label.classList.add('hidden');
+            container.innerHTML = '';
+            container.classList.remove('hidden');
 
-        function updateResultBox(color) {
-            const t = i18n[currentLang];
-            const config = {
-                yellow: { name: t.yellow, bg: 'bg-yellow-100', text: 'text-yellow-700' },
-                green:  { name: t.green,  bg: 'bg-green-100',  text: 'text-green-700'  },
-                blue:   { name: t.blue,   bg: 'bg-blue-100',   text: 'text-blue-700'   },
-                red:    { name: t.red,    bg: 'bg-red-100',    text: 'text-red-700'    },
-            };
-            const c = config[color] || config.blue;
-            document.getElementById('result-box').className =
-                `p-5 rounded-2xl text-center min-h-[110px] flex flex-col justify-center ${c.bg} ${c.text} border-2 border-white shadow-inner`;
-            document.getElementById('bin-advice').innerText = c.name;
-        }
+            items.forEach((item, i) => {
+                const c = BIN_CONFIG[item.bin] || BIN_CONFIG.blue;
+                const name = currentLang === 'th' ? item.name_th : item.name_en;
+                const binLabel = t[item.bin] || item.bin;
+                const fact = currentLang === 'th' ? item.fact_th : item.fact_en;
+                const advice = currentLang === 'th' ? item.advice_th : item.advice_en;
 
-        function showFactAdvice(result) {
-            const factCard   = document.getElementById('fact-card');
-            const adviceCard = document.getElementById('advice-card');
-            const factText   = document.getElementById('fact-text');
-            const adviceText = document.getElementById('advice-text');
-
-            factText.innerText   = currentLang === 'th' ? result.fact_th   : result.fact_en;
-            adviceText.innerText = currentLang === 'th' ? result.advice_th : result.advice_en;
-
-            factCard.classList.remove('hidden');
-            adviceCard.classList.remove('hidden');
-
-            // re-trigger animation
-            [factCard, adviceCard].forEach(el => {
-                el.classList.remove('card-in');
-                void el.offsetWidth;
-                el.classList.add('card-in');
+                const card = document.createElement('div');
+                card.className = `${c.bg} ${c.border} border rounded-xl p-3 card-in`;
+                card.style.animationDelay = `${i * 60}ms`;
+                card.innerHTML = `
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="${c.text} font-black text-sm">${name}</span>
+                        <span class="${c.badge} text-white text-xs font-bold px-2 py-0.5 rounded-full ml-auto whitespace-nowrap">${binLabel}</span>
+                    </div>
+                    <p class="text-xs text-gray-500 leading-relaxed">⏳ ${fact}</p>
+                    <p class="text-xs text-gray-500 leading-relaxed mt-0.5">💡 ${advice}</p>`;
+                container.appendChild(card);
             });
+        }
+
+        // ── Real-time Mode ────────────────────────────────────────────────────
+        function captureForRealtime() {
+            if (isAnalyzing || !video.videoWidth) return;
+            canvas.width  = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            runAnalysis(resizeToBase64(canvas), 'image/jpeg');
+        }
+
+        function toggleRealtime() {
+            isRealtime ? stopRealtime() : startRealtime();
+        }
+
+        function startRealtime() {
+            isRealtime = true;
+            document.getElementById('txt-realtime').innerText = '⏹ หยุด';
+            document.getElementById('btn-realtime').className =
+                'flex-1 bg-red-600 text-white py-4 rounded-2xl font-black text-base shadow-md active:scale-95 transition';
+            document.getElementById('btn-capture').classList.add('hidden');
+            canvas.classList.add('hidden');
+            video.classList.remove('hidden');
+            resetResultBox();
+            captureForRealtime();
+            realtimeTimer = setInterval(captureForRealtime, 3500);
+        }
+
+        function stopRealtime() {
+            isRealtime = false;
+            clearInterval(realtimeTimer);
+            realtimeTimer = null;
+            document.getElementById('txt-realtime').innerText = 'Real-time';
+            document.getElementById('btn-realtime').className =
+                'flex-1 bg-gray-700 text-white py-4 rounded-2xl font-black text-base shadow-md active:scale-95 transition';
+            document.getElementById('btn-capture').classList.remove('hidden');
+            document.getElementById('live-badge').classList.add('hidden');
         }
 
         // ── File Upload ───────────────────────────────────────────────────────
@@ -635,12 +683,7 @@
             updateUIStrings();
             updateGameHint();
             renderXPBar();
-            if (currentResult && currentResult.found) {
-                const name = currentLang === 'th' ? currentResult.name_th : currentResult.name_en;
-                document.getElementById('label').innerText = name;
-                updateResultBox(currentResult.bin);
-                showFactAdvice(currentResult);
-            }
+            if (currentResults.length > 0) displayResults(currentResults);
         }
 
         function updateUIStrings() {
@@ -654,8 +697,6 @@
             document.getElementById('txt-upload').innerText      = t.uploadBtn;
             document.getElementById('txt-score-label').innerText = t.score;
             document.getElementById('txt-lives-label').innerText = t.lives;
-            document.getElementById('txt-fact-label').innerText  = t.factLabel;
-            document.getElementById('txt-advice-label').innerText = t.adviceLabel;
             document.getElementById('btn-y').innerText           = t.btnY;
             document.getElementById('btn-g').innerText           = t.btnG;
             document.getElementById('btn-b').innerText           = t.btnB;
@@ -676,6 +717,7 @@
         }
 
         function openTab(tabId, el) {
+            if (tabId !== 'ai-tab' && isRealtime) stopRealtime();
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('nav button').forEach(b => {
                 b.classList.remove('active-tab');
