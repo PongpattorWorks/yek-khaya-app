@@ -228,10 +228,18 @@
             document.getElementById('label').innerText = label.split(',')[0];
 
             const binMapping = {
-                'bottle': 'yellow', 'can': 'yellow', 'paper': 'yellow', 'banana': 'green',
-                'apple': 'green', 'orange': 'green', 'lighter': 'red', 'battery': 'red',
-                'packet': 'blue', 'snack': 'blue', 'tissue': 'blue'
-            };
+            // --- IT & Electronics (Red Bin) ---
+            'mouse': 'red', 'keyboard': 'red', 'laptop': 'red', 'notebook': 'red', 
+            'monitor': 'red', 'screen': 'red', 'cellular telephone': 'red', 'ipod': 'red',
+            'hard disc': 'red', 'modem': 'red', 'joystick': 'red', 'loudspeaker': 'red',
+            'electric fan': 'red', 'iron': 'red', 'microwave': 'red', 'battery': 'red',
+            // --- Recyclables (Yellow) ---
+            'bottle': 'yellow', 'can': 'yellow', 'paper': 'yellow', 'cardboard': 'yellow', 'cup': 'yellow',
+            // --- Organic (Green) ---
+            'banana': 'green', 'apple': 'green', 'orange': 'green', 'broccoli': 'green', 'lemon': 'green',
+            // --- General (Blue) ---
+            'packet': 'blue', 'snack': 'blue', 'tissue': 'blue', 'plastic bag': 'blue'
+        };
 
             let found = false;
             for (let key in binMapping) {
