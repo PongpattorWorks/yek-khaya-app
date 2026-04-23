@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yek-Khaya AI & Game</title>
+    <title>Yek-Khaya AI - Smart Sorter</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
     <style>
@@ -21,10 +21,31 @@
             color: #10b981;
         }
 
-        video {
+        video,
+        #user-image {
             width: 100%;
             height: 100%;
             object-fit: cover;
+        }
+
+        /* Animation สำหรับคะแนน */
+        @keyframes score-up {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.2);
+                color: #10b981;
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .score-anim {
+            animation: score-up 0.3s ease-out;
         }
     </style>
 </head>
@@ -40,37 +61,64 @@
     </nav>
 
     <main class="max-w-md mx-auto p-4">
+
         <div id="ai-tab" class="tab-content active">
             <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                <h2 class="text-xl font-bold text-gray-800 mb-4">ส่องกล้องไปที่ขยะ</h2>
                 <div id="video-holder"
-                    class="relative bg-gray-200 rounded-xl overflow-hidden aspect-square flex items-center justify-center">
-                    <p id="loading-msg">กำลังเตรียมกล้องและ AI...</p>
+                    class="relative bg-gray-200 rounded-xl overflow-hidden aspect-square flex items-center justify-center mb-4">
+                    <img id="user-image" class="hidden" alt="Uploaded">
+                    <p id="loading-msg">กำลังเตรียมระบบ AI...</p>
                 </div>
-                <div id="result-box" class="mt-4 p-4 rounded-xl text-center transition-all duration-300 bg-gray-100">
-                    <p class="text-sm text-gray-500 uppercase tracking-widest">AI ตรวจพบ:</p>
-                    <p id="label" class="text-2xl font-black text-gray-800">---</p>
-                    <p id="bin-advice" class="mt-2 font-bold text-lg"></p>
+
+                <div class="flex gap-2 mb-4">
+                    <button onclick="restartCamera()"
+                        class="flex-1 bg-gray-800 text-white py-3 rounded-xl font-bold text-sm transition active:scale-95">🔄
+                        ใช้กล้องสด</button>
+                    <label
+                        class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-sm text-center cursor-pointer transition active:scale-95">
+                        📁 เลือกรูปภาพ
+                        <input type="file" accept="image/*" class="hidden" onchange="handleFileUpload(event)">
+                    </label>
+                </div>
+
+                <div id="result-box" class="p-4 rounded-xl text-center bg-gray-100 transition-all duration-300">
+                    <p id="label" class="text-2xl font-black text-gray-800">รอรับข้อมูล...</p>
+                    <p id="bin-advice" class="mt-1 font-bold text-lg"></p>
                 </div>
             </div>
         </div>
 
         <div id="game-tab" class="tab-content">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
-                <h2 class="text-xl font-bold text-gray-800 mb-2">แยกให้ถูกถัง!</h2>
-                <p class="text-gray-500 mb-4">คะแนนของคุณ: <span id="score" class="font-bold text-green-600">0</span>
-                </p>
-                <div class="bg-gray-100 h-48 rounded-2xl mb-6 flex items-center justify-center text-6xl shadow-inner">
-                    <span id="game-emoji">🥤</span>
+                <div class="flex justify-between items-center mb-6">
+                    <div class="text-left">
+                        <p class="text-xs text-gray-400 uppercase font-bold">SCORE</p>
+                        <p id="score" class="text-3xl font-black text-green-600">0</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs text-gray-400 uppercase font-bold">LIVES</p>
+                        <p id="lives-display" class="text-2xl">❤️❤️❤️</p>
+                    </div>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+
+                <div
+                    class="bg-gray-50 h-56 rounded-3xl mb-8 flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
+                    <span id="game-emoji" class="text-8xl mb-2 transition-transform duration-300">🥤</span>
+                    <p id="game-hint" class="text-gray-400 text-sm italic">ชิ้นนี้ทิ้งถังไหนดี?</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
                     <button onclick="playGame('yellow')"
-                        class="bg-yellow-400 text-white py-4 rounded-xl font-bold">เหลือง (รีไซเคิล)</button>
-                    <button onclick="playGame('green')" class="bg-green-500 text-white py-4 rounded-xl font-bold">เขียว
-                        (ขยะเปียก)</button>
-                    <button onclick="playGame('blue')" class="bg-blue-500 text-white py-4 rounded-xl font-bold">น้ำเงิน
+                        class="bg-yellow-400 hover:bg-yellow-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-yellow-100 active:scale-95 transition">เหลือง
+                        (รีไซเคิล)</button>
+                    <button onclick="playGame('green')"
+                        class="bg-green-500 hover:bg-green-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-green-100 active:scale-95 transition">เขียว
+                        (เปียก)</button>
+                    <button onclick="playGame('blue')"
+                        class="bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-100 active:scale-95 transition">น้ำเงิน
                         (ทั่วไป)</button>
-                    <button onclick="playGame('red')" class="bg-red-500 text-white py-4 rounded-xl font-bold">แดง
+                    <button onclick="playGame('red')"
+                        class="bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-100 active:scale-95 transition">แดง
                         (อันตราย)</button>
                 </div>
             </div>
@@ -78,24 +126,60 @@
     </main>
 
     <script>
-        let classifier;
-        let video;
-        let isModelReady = false;
-
+        // --- Setup & AI Logic ---
+        let classifier, video, isModelReady = false, isUsingCamera = true;
         const binMapping = {
-            'banana': { name: 'ขยะเปียก', bg: 'bg-green-100', text: 'text-green-700' },
-            'bottle': { name: 'ขยะรีไซเคิล', bg: 'bg-yellow-100', text: 'text-yellow-700' },
-            'mug': { name: 'ขยะทั่วไป', bg: 'bg-blue-100', text: 'text-blue-700' },
-            'lighter': { name: 'ขยะอันตราย', bg: 'bg-red-100', text: 'text-red-700' },
-            'packet': { name: 'ขยะทั่วไป', bg: 'bg-blue-100', text: 'text-blue-700' }
+            // 🟡 ถังขยะรีไซเคิล (Recyclable Waste)
+            'bottle': { name: 'รีไซเคิล (เหลือง)', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            'water bottle': { name: 'รีไซเคิล (เหลือง)', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            'wine bottle': { name: 'รีไซเคิล (เหลือง)', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            'can': { name: 'รีไซเคิล (เหลือง)', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            'beer glass': { name: 'รีไซเคิล (เหลือง)', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            'cup': { name: 'รีไซเคิล (เหลือง)', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            'paper': { name: 'รีไซเคิล (เหลือง)', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            'envelope': { name: 'รีไซเคิล (เหลือง)', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            'cardboard': { name: 'รีไซเคิล (เหลือง)', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            'carton': { name: 'รีไซเคิล (เหลือง)', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+
+            // 🟢 ถังขยะเปียก (Organic Waste)
+            'banana': { name: 'ขยะเปียก (เขียว)', bg: 'bg-green-100', text: 'text-green-700' },
+            'apple': { name: 'ขยะเปียก (เขียว)', bg: 'bg-green-100', text: 'text-green-700' },
+            'orange': { name: 'ขยะเปียก (เขียว)', bg: 'bg-green-100', text: 'text-green-700' },
+            'lemon': { name: 'ขยะเปียก (เขียว)', bg: 'bg-green-100', text: 'text-green-700' },
+            'pineapple': { name: 'ขยะเปียก (เขียว)', bg: 'bg-green-100', text: 'text-green-700' },
+            'pomegranate': { name: 'ขยะเปียก (เขียว)', bg: 'bg-green-100', text: 'text-green-700' },
+            'mushroom': { name: 'ขยะเปียก (เขียว)', bg: 'bg-green-100', text: 'text-green-700' },
+            'corn': { name: 'ขยะเปียก (เขียว)', bg: 'bg-green-100', text: 'text-green-700' },
+            'cucumber': { name: 'ขยะเปียก (เขียว)', bg: 'bg-green-100', text: 'text-green-700' },
+            'broccoli': { name: 'ขยะเปียก (เขียว)', bg: 'bg-green-100', text: 'text-green-700' },
+
+            // 🔴 ถังขยะอันตราย (Hazardous Waste)
+            'lighter': { name: 'อันตราย (แดง)', bg: 'bg-red-100', text: 'text-red-700' },
+            'battery': { name: 'อันตราย (แดง)', bg: 'bg-red-100', text: 'text-red-700' },
+            'ashcan': { name: 'อันตราย (แดง)', bg: 'bg-red-100', text: 'text-red-700' },
+            'hairspray': { name: 'อันตราย (แดง)', bg: 'bg-red-100', text: 'text-red-700' },
+            'electric fan': { name: 'อันตราย (แดง)', bg: 'bg-red-100', text: 'text-red-700' }, // ขยะอิเล็กทรอนิกส์
+            'cellular telephone': { name: 'อันตราย (แดง)', bg: 'bg-red-100', text: 'text-red-700' },
+            'ipod': { name: 'อันตราย (แดง)', bg: 'bg-red-100', text: 'text-red-700' },
+            'mouse': { name: 'อันตราย (แดง)', bg: 'bg-red-100', text: 'text-red-700' },
+
+            // 🔵 ถังขยะทั่วไป (General Waste)
+            'packet': { name: 'ทั่วไป (น้ำเงิน)', bg: 'bg-blue-100', text: 'text-blue-700' },
+            'snack': { name: 'ทั่วไป (น้ำเงิน)', bg: 'bg-blue-100', text: 'text-blue-700' },
+            'plastic bag': { name: 'ทั่วไป (น้ำเงิน)', bg: 'bg-blue-100', text: 'text-blue-700' },
+            'bubble wrap': { name: 'ทั่วไป (น้ำเงิน)', bg: 'bg-blue-100', text: 'text-blue-700' },
+            'diaper': { name: 'ทั่วไป (น้ำเงิน)', bg: 'bg-blue-100', text: 'text-blue-700' },
+            'tissue': { name: 'ทั่วไป (น้ำเงิน)', bg: 'bg-blue-100', text: 'text-blue-700' },
+            'toilet tissue': { name: 'ทั่วไป (น้ำเงิน)', bg: 'bg-blue-100', text: 'text-blue-700' },
+            'sponge': { name: 'ทั่วไป (น้ำเงิน)', bg: 'bg-blue-100', text: 'text-blue-700' },
+            'plate': { name: 'ทั่วไป (น้ำเงิน)', bg: 'bg-blue-100', text: 'text-blue-700' }, // จานชามเมลามีน/เซรามิกแตก
+            'soap dispenser': { name: 'ทั่วไป (น้ำเงิน)', bg: 'bg-blue-100', text: 'text-blue-700' }
         };
 
         function openTab(tabId, el) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-            document.querySelectorAll('nav button').forEach(btn => {
-                btn.classList.remove('active-tab', 'text-gray-500');
-                btn.classList.add('text-gray-500');
-            });
+            document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('active-tab', 'text-gray-500'));
+            document.querySelectorAll('nav button').forEach(btn => btn.classList.add('text-gray-500'));
             document.getElementById(tabId).classList.add('active');
             el.classList.add('active-tab');
             el.classList.remove('text-gray-500');
@@ -103,94 +187,134 @@
 
         async function setup() {
             video = document.createElement('video');
-            video.setAttribute('autoplay', '');
-            video.setAttribute('muted', '');
-            video.setAttribute('playsinline', '');
-
+            video.setAttribute('autoplay', ''); video.setAttribute('muted', ''); video.setAttribute('playsinline', '');
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 video.srcObject = stream;
-                document.getElementById('video-holder').innerHTML = '';
-                document.getElementById('video-holder').appendChild(video);
-
-                // โหลด Classifier
-                classifier = ml5.imageClassifier('MobileNet', video, modelReady);
+                document.getElementById('video-holder').prepend(video);
+                classifier = ml5.imageClassifier('MobileNet', video, () => { isModelReady = true; document.getElementById('loading-msg').classList.add('hidden'); classifyVideo(); });
             } catch (err) {
-                document.getElementById('loading-msg').innerText = 'ไม่สามารถเข้าถึงกล้องได้';
-                console.error(err);
+                document.getElementById('loading-msg').innerText = 'เข้าถึงกล้องไม่ได้ แต่ยังอัพโหลดรูปได้ครับ';
+                classifier = ml5.imageClassifier('MobileNet', () => { isModelReady = true; });
             }
         }
 
-        function modelReady() {
-            isModelReady = true;
-            const msg = document.getElementById('loading-msg');
-            if (msg) msg.style.display = 'none';
-            classifyVideo();
-        }
-
         function classifyVideo() {
-            // ตรวจสอบว่า classifier พร้อมใช้งานหรือไม่
-            if (classifier && isModelReady) {
-                classifier.classify((err, results) => {
-                    if (err) {
-                        console.error(err);
-                    } else if (results && results.length > 0) {
-                        const label = results[0].label.toLowerCase();
-                        const labelElem = document.getElementById('label');
-                        if (labelElem) labelElem.innerText = label.split(',')[0];
-
-                        let found = false;
-                        for (let key in binMapping) {
-                            if (label.includes(key)) {
-                                updateUI(binMapping[key]);
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            const advice = document.getElementById('bin-advice');
-                            const box = document.getElementById('result-box');
-                            if (advice) advice.innerText = "กำลังวิเคราะห์...";
-                            if (box) box.className = "mt-4 p-4 rounded-xl text-center bg-gray-100 text-gray-400";
-                        }
-                    }
-                    // ใช้ requestAnimationFrame แทนการเรียกซ้อนกันตรงๆ เพื่อประสิทธิภาพ
+            if (classifier && isModelReady && isUsingCamera) {
+                classifier.classify(video, (err, results) => {
+                    if (results) processResults(results);
                     requestAnimationFrame(classifyVideo);
                 });
             }
         }
 
-        function updateUI(info) {
-            const box = document.getElementById('result-box');
-            const advice = document.getElementById('bin-advice');
-            if (box && advice) {
-                box.className = `mt-4 p-4 rounded-xl text-center ${info.bg} ${info.text}`;
-                advice.innerText = `ทิ้งลง: ถังสี${info.name}`;
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            isUsingCamera = false;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = document.getElementById('user-image');
+                img.src = e.target.result;
+                img.classList.remove('hidden');
+                if (video) video.classList.add('hidden');
+                classifier.classify(img, (err, results) => { if (results) processResults(results); });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function restartCamera() {
+            isUsingCamera = true;
+            document.getElementById('user-image').classList.add('hidden');
+            if (video) video.classList.remove('hidden');
+            classifyVideo();
+        }
+
+        function processResults(results) {
+            const label = results[0].label.toLowerCase();
+            document.getElementById('label').innerText = label.split(',')[0];
+            let found = false;
+            for (let key in binMapping) {
+                if (label.includes(key)) {
+                    updateUI(binMapping[key]);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                document.getElementById('bin-advice').innerText = "ไม่แน่ใจประเภทขยะ...";
+                document.getElementById('result-box').className = "p-4 rounded-xl text-center bg-gray-100";
             }
         }
 
-        // --- Mini Game Logic ---
+        function updateUI(info) {
+            const box = document.getElementById('result-box');
+            box.className = `p-4 rounded-xl text-center ${info.bg} ${info.text}`;
+            document.getElementById('bin-advice').innerText = `ทิ้งลง: ถังสี${info.name}`;
+        }
+
+        // --- 🎮 Improved Game Logic ---
         const gameItems = [
-            { emoji: '🍎', bin: 'green' }, { emoji: '📰', bin: 'yellow' },
-            { emoji: '🔋', bin: 'red' }, { emoji: '🍟', bin: 'blue' },
-            { emoji: '🥤', bin: 'yellow' }
+            { emoji: '🍎', bin: 'green', name: 'เศษแอปเปิ้ล' },
+            { emoji: '📰', bin: 'yellow', name: 'หนังสือพิมพ์' },
+            { emoji: '🔋', bin: 'red', name: 'ถ่านไฟฉาย' },
+            { emoji: ' Fries', bin: 'blue', name: 'ถุงขนม' },
+            { emoji: '🥤', bin: 'yellow', name: 'แก้วพลาสติก' },
+            { emoji: '🥦', bin: 'green', name: 'เศษผัก' },
+            { emoji: '💡', bin: 'red', name: 'หลอดไฟ' },
+            { emoji: '📦', bin: 'yellow', name: 'กล่องกระดาษ' }
         ];
-        let currentItem;
         let score = 0;
+        let lives = 3;
+        let currentItem;
 
         function nextItem() {
             currentItem = gameItems[Math.floor(Math.random() * gameItems.length)];
-            document.getElementById('game-emoji').innerText = currentItem.emoji;
+            const emojiEl = document.getElementById('game-emoji');
+            emojiEl.innerText = currentItem.emoji;
+            document.getElementById('game-hint').innerText = `ชิ้นนี้คือ: ${currentItem.name}`;
+
+            // เอฟเฟกต์เด้งตอนเปลี่ยนรูป
+            emojiEl.style.transform = 'scale(0.5)';
+            setTimeout(() => emojiEl.style.transform = 'scale(1)', 50);
+        }
+
+        function updateLivesDisplay() {
+            const hearts = '❤️'.repeat(lives) + '🖤'.repeat(3 - lives);
+            document.getElementById('lives-display').innerText = hearts;
         }
 
         function playGame(selectedColor) {
+            const scoreEl = document.getElementById('score');
+
             if (selectedColor === currentItem.bin) {
+                // ตอบถูก
                 score++;
-                document.getElementById('score').innerText = score;
+                scoreEl.innerText = score;
+                scoreEl.classList.add('score-anim');
+                setTimeout(() => scoreEl.classList.remove('score-anim'), 300);
                 nextItem();
             } else {
-                alert('ยังไม่ถูกนะ ลองใหม่!');
+                // ตอบผิด
+                lives--;
+                updateLivesDisplay();
+
+                if (lives <= 0) {
+                    alert(`เกมจบแล้ว! คุณทำคะแนนได้ ${score} คะแนน ✌️`);
+                    resetGame();
+                } else {
+                    alert(`ยังไม่ถูก! ${currentItem.emoji} เป็น${currentItem.name} ต้องทิ้งถังสี ${currentItem.bin}`);
+                    nextItem();
+                }
             }
+        }
+
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            document.getElementById('score').innerText = score;
+            updateLivesDisplay();
+            nextItem();
         }
 
         setup();
