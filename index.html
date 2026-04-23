@@ -6,20 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Waste AI - Full Version</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
     <style>
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .active-tab {
-            border-bottom: 4px solid #10b981;
-            color: #10b981;
-        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .active-tab { border-bottom: 4px solid #10b981; color: #10b981; }
 
         .camera-view {
             position: relative;
@@ -30,47 +20,68 @@
             overflow: hidden;
         }
 
-        #webcam,
-        #canvas-capture,
-        #user-image {
+        #webcam, #canvas-capture, #user-image {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             object-fit: cover;
         }
 
         @keyframes score-up {
-            0% {
-                transform: scale(1);
-            }
-
-            50% {
-                transform: scale(1.2);
-                color: #10b981;
-            }
-
-            100% {
-                transform: scale(1);
-            }
+            0%   { transform: scale(1); }
+            50%  { transform: scale(1.2); color: #10b981; }
+            100% { transform: scale(1); }
         }
+        .score-anim { animation: score-up 0.3s ease; }
 
-        .score-anim {
-            animation: score-up 0.3s ease;
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateX(-50%) translateY(16px); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
+        .toast { animation: toast-in 0.2s ease; }
+
+        @keyframes xp-pop {
+            0%   { transform: scale(1); }
+            50%  { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+        .xp-pop { animation: xp-pop 0.4s ease; }
+
+        #xp-fill { transition: width 0.5s ease; }
+
+        @keyframes card-in {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .card-in { animation: card-in 0.3s ease forwards; }
     </style>
 </head>
 
 <body class="bg-gray-100 min-h-screen">
 
+    <!-- API Key Banner -->
+    <div id="api-key-banner" class="bg-amber-50 border-b-2 border-amber-200 hidden">
+        <div class="max-w-md mx-auto px-4 py-3">
+            <p class="text-xs text-amber-800 font-bold mb-2">
+                🔑 ใส่ Gemini API Key — รับฟรีที่
+                <span class="underline">aistudio.google.com/apikey</span>
+            </p>
+            <div class="flex gap-2">
+                <input id="api-key-input" type="password" placeholder="AIza..."
+                    class="flex-1 border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+                <button onclick="saveApiKey()"
+                    class="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-bold active:scale-95 transition whitespace-nowrap">
+                    บันทึก
+                </button>
+            </div>
+        </div>
+    </div>
+
     <nav class="bg-white shadow-md sticky top-0 z-50">
         <div class="max-w-md mx-auto flex justify-between items-center px-4">
             <div class="flex flex-1">
-                <button onclick="openTab('ai-tab', this)" id="nav-scan" class="py-4 px-4 font-bold active-tab">📸
-                    สแกนขยะ</button>
-                <button onclick="openTab('game-tab', this)" id="nav-game" class="py-4 px-4 font-bold text-gray-400">🎮
-                    เกม</button>
+                <button onclick="openTab('ai-tab', this)" id="nav-scan" class="py-4 px-4 font-bold active-tab">📸 สแกนขยะ</button>
+                <button onclick="openTab('game-tab', this)" id="nav-game" class="py-4 px-4 font-bold text-gray-400">🎮 เกม</button>
             </div>
             <button onclick="toggleLang()"
                 class="bg-gray-100 border border-gray-300 px-3 py-1 rounded-full text-xs font-bold active:bg-gray-200 transition">
@@ -78,6 +89,26 @@
             </button>
         </div>
     </nav>
+
+    <!-- XP Bar -->
+    <div class="bg-white border-b border-gray-100 shadow-sm">
+        <div class="max-w-md mx-auto px-4 py-2 flex items-center gap-3">
+            <span id="level-badge" class="bg-green-500 text-white text-xs font-black px-2 py-1 rounded-full whitespace-nowrap">LV.1</span>
+            <div class="flex-1 min-w-0">
+                <div class="flex justify-between items-center mb-1">
+                    <span id="level-name" class="text-xs font-bold text-gray-500 truncate">มือใหม่</span>
+                    <span id="xp-text" class="text-xs text-gray-400 ml-2 whitespace-nowrap">0 / 100 XP</span>
+                </div>
+                <div class="bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div id="xp-fill" class="bg-green-500 h-2 rounded-full" style="width:0%"></div>
+                </div>
+            </div>
+            <div class="text-center text-xs shrink-0">
+                <div class="text-gray-400">🏆</div>
+                <div id="best-score-display" class="font-black text-green-600">0</div>
+            </div>
+        </div>
+    </div>
 
     <main class="max-w-md mx-auto p-4">
         <div id="ai-tab" class="tab-content active">
@@ -88,10 +119,14 @@
                     <img id="user-image" class="hidden">
                     <div id="loading-container"
                         class="absolute inset-0 flex flex-col items-center justify-center bg-gray-200 z-40">
-                        <div
-                            class="animate-spin rounded-full h-10 w-10 border-4 border-green-500 border-t-transparent mb-2">
-                        </div>
-                        <p id="txt-loading" class="text-sm text-gray-500 italic">Loading AI...</p>
+                        <div class="animate-spin rounded-full h-10 w-10 border-4 border-green-500 border-t-transparent mb-2"></div>
+                        <p id="txt-loading" class="text-sm text-gray-500 italic">กำลังโหลดกล้อง...</p>
+                    </div>
+                    <!-- Analyzing overlay -->
+                    <div id="analyzing-overlay"
+                        class="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-40 hidden">
+                        <div class="animate-spin rounded-full h-12 w-12 border-4 border-green-400 border-t-transparent mb-3"></div>
+                        <p id="txt-analyzing" class="text-sm text-white font-bold">กำลังวิเคราะห์...</p>
                     </div>
                     <div id="flash"
                         class="absolute inset-0 bg-white opacity-0 pointer-events-none z-50 transition-opacity duration-75">
@@ -100,17 +135,17 @@
 
                 <button id="btn-capture" onclick="takePicture()"
                     class="w-full bg-green-500 text-white py-4 rounded-2xl font-black text-xl shadow-lg shadow-green-200 active:scale-95 transition mb-6 hidden">
-                    📸 <span id="txt-scan-now">สแกนเลย / SCAN NOW</span>
+                    📸 <span id="txt-scan-now">สแกนเลย!</span>
                 </button>
 
                 <div id="controls" class="flex gap-2 mb-4 opacity-50 pointer-events-none">
                     <button onclick="retake()"
                         class="flex-1 bg-gray-800 text-white py-3 rounded-xl font-bold text-sm active:scale-95 transition">
-                        🔄 <span id="txt-retake">ถ่ายใหม่ / Retake</span>
+                        🔄 <span id="txt-retake">ถ่ายใหม่</span>
                     </button>
                     <label
                         class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-sm text-center cursor-pointer active:scale-95 transition">
-                        📁 <span id="txt-upload">เลือกรูป / Upload</span>
+                        📁 <span id="txt-upload">เลือกรูป</span>
                         <input type="file" accept="image/*" class="hidden" onchange="handleFile(event)">
                     </label>
                 </div>
@@ -119,6 +154,18 @@
                     class="p-5 rounded-2xl text-center bg-gray-50 min-h-[110px] flex flex-col justify-center">
                     <p id="label" class="text-2xl font-black text-gray-800 uppercase tracking-tight">---</p>
                     <p id="bin-advice" class="mt-1 font-bold text-lg"></p>
+                    <div id="fact-card" class="hidden card-in mt-3 bg-white rounded-xl p-3 text-left border border-gray-100 shadow-sm">
+                        <p class="text-xs font-bold text-gray-400 uppercase tracking-wide">
+                            ⏳ <span id="txt-fact-label">ระยะย่อยสลาย</span>
+                        </p>
+                        <p id="fact-text" class="text-sm font-semibold text-gray-700 mt-1 leading-relaxed"></p>
+                    </div>
+                    <div id="advice-card" class="hidden card-in mt-2 bg-white rounded-xl p-3 text-left border border-gray-100 shadow-sm">
+                        <p class="text-xs font-bold text-gray-400 uppercase tracking-wide">
+                            💡 <span id="txt-advice-label">วิธีทิ้งที่ถูกต้อง</span>
+                        </p>
+                        <p id="advice-text" class="text-sm text-gray-600 mt-1 leading-relaxed"></p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -154,53 +201,208 @@
     </main>
 
     <script>
+        // ── i18n ──────────────────────────────────────────────────────────────
         let currentLang = 'th';
         const i18n = {
             th: {
-                navScan: "📸 สแกนขยะ", navGame: "🎮 เกม", loading: "กำลังโหลด AI...",
-                ready: "พร้อมสแกน!", unsure: "ไม่แน่ใจ... ลองสแกนอีกที",
+                navScan: "📸 สแกนขยะ", navGame: "🎮 เกม", loading: "กำลังโหลดกล้อง...",
+                ready: "พร้อมสแกน!", unsure: "ไม่พบวัตถุชัดเจน ลองใหม่อีกครั้ง",
+                analyzing: "กำลังวิเคราะห์...",
                 score: "คะแนน", lives: "ชีวิต", hintPrefix: "ชิ้นนี้คือ: ",
-                yellow: "รีไซเคิล (เหลือง)", green: "ขยะเปียก (เขียว)", blue: "ทั่วไป (น้ำเงิน)", red: "อันตราย/IT (แดง)",
+                yellow: "รีไซเคิล (ถังเหลือง)", green: "ขยะเปียก (ถังเขียว)",
+                blue: "ทั่วไป (ถังน้ำเงิน)", red: "อันตราย/IT (ถังแดง)",
                 wrong: "ยังไม่ถูก!", belongs: "ต้องทิ้งถังสี", gameover: "จบเกม! คะแนน: ",
-                btnY: "เหลือง", btnG: "เขียว", btnB: "น้ำเงิน", btnR: "แดง"
+                btnY: "เหลือง", btnG: "เขียว", btnB: "น้ำเงิน", btnR: "แดง",
+                scanNow: "สแกนเลย!", retakeBtn: "ถ่ายใหม่", uploadBtn: "เลือกรูป",
+                cameraDenied: "กรุณาอนุญาตการใช้กล้อง", cameraError: "ไม่สามารถเข้าถึงกล้องได้",
+                classifyError: "วิเคราะห์ไม่สำเร็จ ลองใหม่อีกครั้ง", apiKeyMissing: "กรุณาใส่ Gemini API Key",
+                factLabel: "ระยะย่อยสลาย", adviceLabel: "วิธีทิ้งที่ถูกต้อง",
+                xpGain: "+{n} XP", levelUp: "เลื่อนระดับ! ยินดีด้วย 🎉", newBest: "สถิติใหม่! 🏆"
             },
             en: {
-                navScan: "📸 Scan", navGame: "🎮 Game", loading: "AI Loading...",
-                ready: "Ready to Scan!", unsure: "Not sure... try again",
+                navScan: "📸 Scan", navGame: "🎮 Game", loading: "Loading camera...",
+                ready: "Ready to Scan!", unsure: "No clear object found, try again",
+                analyzing: "Analyzing...",
                 score: "SCORE", lives: "LIVES", hintPrefix: "This is: ",
-                yellow: "Recyclable (Yellow)", green: "Organic (Green)", blue: "General (Blue)", red: "Hazard/IT (Red)",
+                yellow: "Recyclable (Yellow)", green: "Organic (Green)",
+                blue: "General (Blue)", red: "Hazard/IT (Red)",
                 wrong: "Incorrect!", belongs: "It belongs to: ", gameover: "Game Over! Score: ",
-                btnY: "Yellow", btnG: "Green", btnB: "Blue", btnR: "Red"
+                btnY: "Yellow", btnG: "Green", btnB: "Blue", btnR: "Red",
+                scanNow: "SCAN NOW!", retakeBtn: "Retake", uploadBtn: "Upload",
+                cameraDenied: "Camera permission denied", cameraError: "Camera not available",
+                classifyError: "Analysis failed, please try again", apiKeyMissing: "Please enter Gemini API Key",
+                factLabel: "Decomposition Time", adviceLabel: "Disposal Tip",
+                xpGain: "+{n} XP", levelUp: "Level Up! Congrats 🎉", newBest: "New Best Score! 🏆"
             }
         };
 
-        const binMapping = {
-            'mouse': 'red', 'keyboard': 'red', 'laptop': 'red', 'notebook': 'red', 'cellular telephone': 'red', 'monitor': 'red',
-            'bottle': 'yellow', 'can': 'yellow', 'paper': 'yellow', 'banana': 'green', 'apple': 'green',
-            'packet': 'blue', 'snack': 'blue', 'tissue': 'blue'
-        };
-
-        const gameItems = [
-            { emoji: '🖱️', bin: 'red', th: 'เมาส์', en: 'Mouse' },
-            { emoji: '📱', bin: 'red', th: 'มือถือ', en: 'Phone' },
-            { emoji: '🍎', bin: 'green', th: 'เศษแอปเปิ้ล', en: 'Apple' },
-            { emoji: '📰', bin: 'yellow', th: 'หนังสือพิมพ์', en: 'Newspaper' },
-            { emoji: '🍪', bin: 'blue', th: 'ซองขนม', en: 'Snack Bag' }
+        // ── Level config ──────────────────────────────────────────────────────
+        const LEVELS = [
+            { level: 1, th: 'มือใหม่',      en: 'Beginner',  threshold: 0    },
+            { level: 2, th: 'นักสำรวจ',     en: 'Explorer',  threshold: 100  },
+            { level: 3, th: 'นักรีไซเคิล',  en: 'Recycler',  threshold: 300  },
+            { level: 4, th: 'ผู้พิทักษ์',   en: 'Guardian',  threshold: 700  },
+            { level: 5, th: 'ปรมาจารย์',    en: 'Master',    threshold: 1500 },
         ];
 
-        let classifier, video, canvas, isModelReady = false;
+        function getLevelData(xp) {
+            let current = LEVELS[0];
+            for (const lv of LEVELS) {
+                if (xp >= lv.threshold) current = lv;
+                else break;
+            }
+            const nextLv = LEVELS.find(lv => lv.threshold > xp);
+            const rangeMin = current.threshold;
+            const rangeMax = nextLv ? nextLv.threshold : current.threshold + 1;
+            const progress = nextLv ? ((xp - rangeMin) / (rangeMax - rangeMin)) * 100 : 100;
+            return { current, nextLv, rangeMin, rangeMax, progress };
+        }
+
+        // ── State ─────────────────────────────────────────────────────────────
+        let totalXP = 0, bestScore = 0;
+        let geminiApiKey = '';
+        let currentResult = null;
+        let isAnalyzing = false;
+        let video, canvas;
         let score = 0, lives = 3, currentItem;
 
-        async function setup() {
-            video = document.getElementById('webcam');
-            canvas = document.getElementById('canvas-capture');
-            updateUIStrings();
+        // ── API Key ───────────────────────────────────────────────────────────
+        function loadApiKey() {
+            geminiApiKey = localStorage.getItem('gemini_api_key') || '';
+            if (!geminiApiKey) {
+                document.getElementById('api-key-banner').classList.remove('hidden');
+            }
+        }
 
-            classifier = ml5.imageClassifier('MobileNet', () => {
-                isModelReady = true;
-                document.getElementById('controls').classList.remove('opacity-50', 'pointer-events-none');
-                startCamera();
-            });
+        function saveApiKey() {
+            const key = document.getElementById('api-key-input').value.trim();
+            if (!key) return;
+            geminiApiKey = key;
+            localStorage.setItem('gemini_api_key', key);
+            document.getElementById('api-key-banner').classList.add('hidden');
+            showToast('บันทึก API Key แล้ว ✅', 'success');
+        }
+
+        // ── Persistence ───────────────────────────────────────────────────────
+        function loadProgress() {
+            totalXP   = parseInt(localStorage.getItem('smartwaste_xp') || '0', 10);
+            bestScore = parseInt(localStorage.getItem('smartwaste_bestscore') || '0', 10);
+            renderXPBar();
+        }
+
+        function saveProgress() {
+            localStorage.setItem('smartwaste_xp', totalXP);
+            localStorage.setItem('smartwaste_bestscore', bestScore);
+        }
+
+        // ── XP bar ────────────────────────────────────────────────────────────
+        function renderXPBar() {
+            const { current, nextLv, rangeMin, rangeMax, progress } = getLevelData(totalXP);
+            const levelName = currentLang === 'th' ? current.th : current.en;
+            const xpLabel   = nextLv
+                ? `${totalXP - rangeMin} / ${rangeMax - rangeMin} XP`
+                : `${totalXP} XP MAX`;
+            document.getElementById('level-badge').innerText        = `LV.${current.level}`;
+            document.getElementById('level-name').innerText         = levelName;
+            document.getElementById('xp-text').innerText            = xpLabel;
+            document.getElementById('xp-fill').style.width          = `${progress}%`;
+            document.getElementById('best-score-display').innerText = bestScore;
+        }
+
+        function addXP(amount) {
+            const before = getLevelData(totalXP).current.level;
+            totalXP += amount;
+            const after = getLevelData(totalXP).current.level;
+            saveProgress();
+            renderXPBar();
+            const badge = document.getElementById('level-badge');
+            badge.classList.remove('xp-pop');
+            void badge.offsetWidth;
+            badge.classList.add('xp-pop');
+            setTimeout(() => badge.classList.remove('xp-pop'), 400);
+            const t = i18n[currentLang];
+            showToast(after > before ? t.levelUp : t.xpGain.replace('{n}', amount), 'success');
+        }
+
+        // ── Gemini API ────────────────────────────────────────────────────────
+        const GEMINI_MODEL  = 'gemini-2.0-flash';
+        const RETRY_DELAYS  = [5, 10, 20]; // seconds between retries
+
+        const GEMINI_PROMPT = `วิเคราะห์วัตถุในภาพนี้ว่าเป็นขยะประเภทใด ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น:
+{
+  "found": true หรือ false,
+  "name_th": "ชื่อวัตถุภาษาไทย",
+  "name_en": "object name in English",
+  "bin": "yellow" หรือ "green" หรือ "blue" หรือ "red",
+  "fact_th": "ข้อเท็จจริงสั้นๆ เกี่ยวกับระยะเวลาย่อยสลาย 1 ประโยค",
+  "fact_en": "one sentence decomposition fact",
+  "advice_th": "คำแนะนำวิธีเตรียมหรือทิ้งให้ถูกต้อง 1 ประโยค",
+  "advice_en": "one sentence disposal tip"
+}
+
+กฎการแยกถัง:
+- yellow = รีไซเคิล (ขวดแก้ว ขวดพลาสติกสะอาด กระป๋องโลหะ กระดาษ กล่องกระดาษ)
+- green = ขยะเปียก/อินทรีย์ (เศษอาหาร ผัก ผลไม้ ใบไม้ เศษพืช)
+- blue = ขยะทั่วไป (ซองขนม โฟม ผ้าอ้อม ถุงพลาสติกสกปรก กระดาษทิชชู)
+- red = อันตราย/E-waste (แบตเตอรี่ อุปกรณ์อิเล็กทรอนิกส์ หลอดไฟ สารเคมี)`;
+
+        async function sleep(s) {
+            const el = document.getElementById('txt-analyzing');
+            for (let i = s; i > 0; i--) {
+                el.innerText = `Rate limit — รอ ${i}s...`;
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            el.innerText = i18n[currentLang].analyzing;
+        }
+
+        async function classifyWithGemini(imageBase64, mimeType = 'image/jpeg') {
+            if (!geminiApiKey) {
+                document.getElementById('api-key-banner').classList.remove('hidden');
+                showToast(i18n[currentLang].apiKeyMissing, 'error');
+                return null;
+            }
+
+            for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+                const res = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [
+                                { inline_data: { mime_type: mimeType, data: imageBase64 } },
+                                { text: GEMINI_PROMPT }
+                            ]}],
+                            generationConfig: { response_mime_type: 'application/json' }
+                        })
+                    }
+                );
+
+                if (res.status === 429 && attempt < RETRY_DELAYS.length) {
+                    await sleep(RETRY_DELAYS[attempt]);
+                    continue;
+                }
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+                }
+
+                const data = await res.json();
+                return JSON.parse(data.candidates[0].content.parts[0].text);
+            }
+
+            throw new Error('Rate limit — ลองใหม่อีกสักครู่');
+        }
+
+        // ── Setup ─────────────────────────────────────────────────────────────
+        function setup() {
+            video  = document.getElementById('webcam');
+            canvas = document.getElementById('canvas-capture');
+            loadApiKey();
+            loadProgress();
+            updateUIStrings();
+            startCamera();
             nextItem();
         }
 
@@ -211,18 +413,36 @@
                 video.onloadedmetadata = () => {
                     document.getElementById('loading-container').classList.add('hidden');
                     document.getElementById('btn-capture').classList.remove('hidden');
+                    document.getElementById('controls').classList.remove('opacity-50', 'pointer-events-none');
                     document.getElementById('label').innerText = i18n[currentLang].ready;
                 };
-            } catch (err) { alert("Camera Error"); }
+            } catch (err) {
+                const t = i18n[currentLang];
+                document.getElementById('loading-container').classList.add('hidden');
+                document.getElementById('controls').classList.remove('opacity-50', 'pointer-events-none');
+                showToast(err.name === 'NotAllowedError' ? t.cameraDenied : t.cameraError, 'error');
+            }
         }
 
-        // --- AI Logic ---
-        function takePicture() {
-            const flash = document.getElementById('flash');
-            flash.style.opacity = "1";
-            setTimeout(() => flash.style.opacity = "0", 100);
+        // ── AI Logic ──────────────────────────────────────────────────────────
+        function resizeToBase64(srcCanvas, maxSize = 512) {
+            const w = srcCanvas.width, h = srcCanvas.height;
+            const scale = Math.min(maxSize / w, maxSize / h, 1);
+            const offscreen = document.createElement('canvas');
+            offscreen.width  = Math.round(w * scale);
+            offscreen.height = Math.round(h * scale);
+            offscreen.getContext('2d').drawImage(srcCanvas, 0, 0, offscreen.width, offscreen.height);
+            return offscreen.toDataURL('image/jpeg', 0.7).split(',')[1];
+        }
 
-            canvas.width = video.videoWidth;
+        function takePicture() {
+            if (isAnalyzing) return;
+
+            const flash = document.getElementById('flash');
+            flash.style.opacity = '1';
+            setTimeout(() => flash.style.opacity = '0', 100);
+
+            canvas.width  = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
 
@@ -230,7 +450,8 @@
             canvas.classList.remove('hidden');
             document.getElementById('btn-capture').classList.add('hidden');
 
-            classifier.classify(canvas, (err, results) => { if (results) displayResult(results); });
+            const base64 = resizeToBase64(canvas);
+            runAnalysis(base64, 'image/jpeg');
         }
 
         function retake() {
@@ -239,51 +460,131 @@
             video.classList.remove('hidden');
             document.getElementById('btn-capture').classList.remove('hidden');
             document.getElementById('label').innerText = i18n[currentLang].ready;
-            document.getElementById('bin-advice').innerText = "";
-            document.getElementById('result-box').className = "p-5 rounded-2xl text-center bg-gray-50";
+            currentResult = null;
+            resetResultBox();
         }
 
-        function displayResult(results) {
-            const topResult = results[0].label.toLowerCase();
-            document.getElementById('label').innerText = topResult.split(',')[0];
-            let found = false;
-            for (let key in binMapping) {
-                if (topResult.includes(key)) {
-                    updateResultBox(binMapping[key]);
-                    found = true;
-                    break;
+        function resetResultBox() {
+            document.getElementById('result-box').className =
+                'p-5 rounded-2xl text-center bg-gray-50 min-h-[110px] flex flex-col justify-center';
+            document.getElementById('bin-advice').innerText = '';
+            document.getElementById('fact-card').classList.add('hidden');
+            document.getElementById('advice-card').classList.add('hidden');
+        }
+
+        async function runAnalysis(base64, mimeType) {
+            isAnalyzing = true;
+            document.getElementById('analyzing-overlay').classList.remove('hidden');
+            document.getElementById('controls').classList.add('opacity-50', 'pointer-events-none');
+            document.getElementById('label').innerText = i18n[currentLang].analyzing;
+            document.getElementById('bin-advice').innerText = '';
+
+            try {
+                const result = await classifyWithGemini(base64, mimeType);
+                if (result) {
+                    currentResult = result;
+                    displayResult(result);
                 }
+            } catch (e) {
+                showToast(`${i18n[currentLang].classifyError}: ${e.message}`, 'error');
+                document.getElementById('label').innerText = '---';
+            } finally {
+                isAnalyzing = false;
+                document.getElementById('analyzing-overlay').classList.add('hidden');
+                document.getElementById('controls').classList.remove('opacity-50', 'pointer-events-none');
             }
-            if (!found) {
-                document.getElementById('bin-advice').innerText = i18n[currentLang].unsure;
-                document.getElementById('result-box').className = "p-5 rounded-2xl text-center bg-gray-50";
+        }
+
+        function displayResult(result) {
+            if (!result.found) {
+                document.getElementById('label').innerText = i18n[currentLang].unsure;
+                resetResultBox();
+                return;
             }
+
+            const name = currentLang === 'th' ? result.name_th : result.name_en;
+            document.getElementById('label').innerText = name;
+            updateResultBox(result.bin);
+            showFactAdvice(result);
+            addXP(10);
         }
 
         function updateResultBox(color) {
-            const box = document.getElementById('result-box');
             const t = i18n[currentLang];
             const config = {
                 yellow: { name: t.yellow, bg: 'bg-yellow-100', text: 'text-yellow-700' },
-                green: { name: t.green, bg: 'bg-green-100', text: 'text-green-700' },
-                blue: { name: t.blue, bg: 'bg-blue-100', text: 'text-blue-700' },
-                red: { name: t.red, bg: 'bg-red-100', text: 'text-red-700' }
+                green:  { name: t.green,  bg: 'bg-green-100',  text: 'text-green-700'  },
+                blue:   { name: t.blue,   bg: 'bg-blue-100',   text: 'text-blue-700'   },
+                red:    { name: t.red,    bg: 'bg-red-100',    text: 'text-red-700'    },
             };
-            box.className = `p-5 rounded-2xl text-center ${config[color].bg} ${config[color].text} border-2 border-white shadow-inner`;
-            document.getElementById('bin-advice').innerText = config[color].name;
+            const c = config[color] || config.blue;
+            document.getElementById('result-box').className =
+                `p-5 rounded-2xl text-center min-h-[110px] flex flex-col justify-center ${c.bg} ${c.text} border-2 border-white shadow-inner`;
+            document.getElementById('bin-advice').innerText = c.name;
         }
 
-        // --- Game Logic ---
+        function showFactAdvice(result) {
+            const factCard   = document.getElementById('fact-card');
+            const adviceCard = document.getElementById('advice-card');
+            const factText   = document.getElementById('fact-text');
+            const adviceText = document.getElementById('advice-text');
+
+            factText.innerText   = currentLang === 'th' ? result.fact_th   : result.fact_en;
+            adviceText.innerText = currentLang === 'th' ? result.advice_th : result.advice_en;
+
+            factCard.classList.remove('hidden');
+            adviceCard.classList.remove('hidden');
+
+            // re-trigger animation
+            [factCard, adviceCard].forEach(el => {
+                el.classList.remove('card-in');
+                void el.offsetWidth;
+                el.classList.add('card-in');
+            });
+        }
+
+        // ── File Upload ───────────────────────────────────────────────────────
+        function handleFile(event) {
+            const file = event.target.files[0];
+            if (!file || isAnalyzing) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = document.getElementById('user-image');
+                img.src = e.target.result;
+                img.classList.remove('hidden');
+                video.classList.add('hidden');
+                canvas.classList.add('hidden');
+                document.getElementById('btn-capture').classList.add('hidden');
+                resetResultBox();
+                document.getElementById('label').innerText = '...';
+
+                const base64 = e.target.result.split(',')[1];
+                runAnalysis(base64, file.type || 'image/jpeg');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // ── Game Logic ────────────────────────────────────────────────────────
+        const gameItems = [
+            { emoji: '🖱️', bin: 'red',    th: 'เมาส์',         en: 'Mouse'     },
+            { emoji: '📱', bin: 'red',    th: 'มือถือ',         en: 'Phone'     },
+            { emoji: '🍎', bin: 'green',  th: 'เศษแอปเปิ้ล',   en: 'Apple'     },
+            { emoji: '📰', bin: 'yellow', th: 'หนังสือพิมพ์',   en: 'Newspaper' },
+            { emoji: '🍪', bin: 'blue',   th: 'ซองขนม',         en: 'Snack Bag' },
+        ];
+
         function nextItem() {
-            currentItem = gameItems[Math.floor(Math.random() * gameItems.length)];
+            const candidates = gameItems.filter(i => i !== currentItem);
+            currentItem = candidates[Math.floor(Math.random() * candidates.length)];
             document.getElementById('game-emoji').innerText = currentItem.emoji;
             updateGameHint();
         }
 
         function updateGameHint() {
             const t = i18n[currentLang];
-            const itemName = currentLang === 'th' ? currentItem.th : currentItem.en;
-            document.getElementById('game-hint').innerText = `${t.hintPrefix}${itemName}`;
+            const name = currentLang === 'th' ? currentItem.th : currentItem.en;
+            document.getElementById('game-hint').innerText = `${t.hintPrefix}${name}`;
         }
 
         function playGame(color) {
@@ -298,13 +599,20 @@
                 lives--;
                 updateLives();
                 if (lives <= 0) {
-                    alert(`${t.gameover} ${score}`);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        saveProgress();
+                        renderXPBar();
+                        showToast(t.newBest, 'success');
+                    } else {
+                        showToast(`${t.gameover}${score}`, 'warning');
+                    }
                     score = 0; lives = 3;
                     document.getElementById('score').innerText = score;
                     updateLives();
                     nextItem();
                 } else {
-                    alert(`${t.wrong} ${currentItem.emoji} ${t.belongs} ${t[currentItem.bin]}`);
+                    showToast(`${t.wrong} ${currentItem.emoji} ${t.belongs} ${t[currentItem.bin]}`, 'error');
                     nextItem();
                 }
             }
@@ -314,48 +622,60 @@
             document.getElementById('lives-display').innerText = '❤️'.repeat(lives) + '🖤'.repeat(3 - lives);
         }
 
-        // --- System Logic ---
+        // ── System Logic ──────────────────────────────────────────────────────
         function toggleLang() {
             currentLang = currentLang === 'th' ? 'en' : 'th';
             updateUIStrings();
             updateGameHint();
+            renderXPBar();
+            if (currentResult && currentResult.found) {
+                const name = currentLang === 'th' ? currentResult.name_th : currentResult.name_en;
+                document.getElementById('label').innerText = name;
+                updateResultBox(currentResult.bin);
+                showFactAdvice(currentResult);
+            }
         }
 
         function updateUIStrings() {
             const t = i18n[currentLang];
-            document.getElementById('nav-scan').innerText = t.navScan;
-            document.getElementById('nav-game').innerText = t.navGame;
+            document.getElementById('nav-scan').innerText        = t.navScan;
+            document.getElementById('nav-game').innerText        = t.navGame;
+            document.getElementById('txt-loading').innerText     = t.loading;
+            document.getElementById('txt-analyzing').innerText   = t.analyzing;
+            document.getElementById('txt-scan-now').innerText    = t.scanNow;
+            document.getElementById('txt-retake').innerText      = t.retakeBtn;
+            document.getElementById('txt-upload').innerText      = t.uploadBtn;
             document.getElementById('txt-score-label').innerText = t.score;
             document.getElementById('txt-lives-label').innerText = t.lives;
-            document.getElementById('btn-y').innerText = t.btnY;
-            document.getElementById('btn-g').innerText = t.btnG;
-            document.getElementById('btn-b').innerText = t.btnB;
-            document.getElementById('btn-r').innerText = t.btnR;
-            if (isModelReady && !video.classList.contains('hidden')) {
-                document.getElementById('label').innerText = t.ready;
-            }
+            document.getElementById('txt-fact-label').innerText  = t.factLabel;
+            document.getElementById('txt-advice-label').innerText = t.adviceLabel;
+            document.getElementById('btn-y').innerText           = t.btnY;
+            document.getElementById('btn-g').innerText           = t.btnG;
+            document.getElementById('btn-b').innerText           = t.btnB;
+            document.getElementById('btn-r').innerText           = t.btnR;
         }
 
-        function handleFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = document.getElementById('user-image');
-                img.src = e.target.result;
-                img.classList.remove('hidden');
-                video.classList.add('hidden');
-                canvas.classList.add('hidden');
-                document.getElementById('btn-capture').classList.add('hidden');
-                classifier.classify(img, (err, results) => { if (results) displayResult(results); });
-            };
-            reader.readAsDataURL(file);
+        function showToast(message, type = 'info') {
+            const existing = document.getElementById('toast');
+            if (existing) existing.remove();
+            const colors = { info: 'bg-gray-800', success: 'bg-green-600', error: 'bg-red-500', warning: 'bg-yellow-500' };
+            const toast = document.createElement('div');
+            toast.id = 'toast';
+            toast.className = `toast fixed bottom-6 left-1/2 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold z-[100] max-w-xs text-center ${colors[type]}`;
+            toast.style.transform = 'translateX(-50%)';
+            toast.innerText = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2500);
         }
 
         function openTab(tabId, el) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab', 'text-gray-400'));
+            document.querySelectorAll('nav button').forEach(b => {
+                b.classList.remove('active-tab');
+                b.classList.add('text-gray-400');
+            });
             document.getElementById(tabId).classList.add('active');
+            el.classList.remove('text-gray-400');
             el.classList.add('active-tab');
         }
 
