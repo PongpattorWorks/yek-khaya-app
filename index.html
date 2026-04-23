@@ -63,11 +63,11 @@
     <div id="api-key-banner" class="bg-amber-50 border-b-2 border-amber-200 hidden">
         <div class="max-w-md mx-auto px-4 py-3">
             <p class="text-xs text-amber-800 font-bold mb-2">
-                🔑 ใส่ Gemini API Key — รับฟรีที่
-                <span class="underline">aistudio.google.com/apikey</span>
+                🔑 ใส่ Groq API Key — รับฟรีที่
+                <span class="underline">console.groq.com/keys</span>
             </p>
             <div class="flex gap-2">
-                <input id="api-key-input" type="password" placeholder="AIza..."
+                <input id="api-key-input" type="password" placeholder="gsk_..."
                     class="flex-1 border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
                 <button onclick="saveApiKey()"
                     class="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-bold active:scale-95 transition whitespace-nowrap">
@@ -215,7 +215,7 @@
                 btnY: "เหลือง", btnG: "เขียว", btnB: "น้ำเงิน", btnR: "แดง",
                 scanNow: "สแกนเลย!", retakeBtn: "ถ่ายใหม่", uploadBtn: "เลือกรูป",
                 cameraDenied: "กรุณาอนุญาตการใช้กล้อง", cameraError: "ไม่สามารถเข้าถึงกล้องได้",
-                classifyError: "วิเคราะห์ไม่สำเร็จ ลองใหม่อีกครั้ง", apiKeyMissing: "กรุณาใส่ Gemini API Key",
+                classifyError: "วิเคราะห์ไม่สำเร็จ ลองใหม่อีกครั้ง", apiKeyMissing: "กรุณาใส่ Groq API Key",
                 factLabel: "ระยะย่อยสลาย", adviceLabel: "วิธีทิ้งที่ถูกต้อง",
                 xpGain: "+{n} XP", levelUp: "เลื่อนระดับ! ยินดีด้วย 🎉", newBest: "สถิติใหม่! 🏆"
             },
@@ -230,7 +230,7 @@
                 btnY: "Yellow", btnG: "Green", btnB: "Blue", btnR: "Red",
                 scanNow: "SCAN NOW!", retakeBtn: "Retake", uploadBtn: "Upload",
                 cameraDenied: "Camera permission denied", cameraError: "Camera not available",
-                classifyError: "Analysis failed, please try again", apiKeyMissing: "Please enter Gemini API Key",
+                classifyError: "Analysis failed, please try again", apiKeyMissing: "Please enter Groq API Key",
                 factLabel: "Decomposition Time", adviceLabel: "Disposal Tip",
                 xpGain: "+{n} XP", levelUp: "Level Up! Congrats 🎉", newBest: "New Best Score! 🏆"
             }
@@ -260,7 +260,7 @@
 
         // ── State ─────────────────────────────────────────────────────────────
         let totalXP = 0, bestScore = 0;
-        let geminiApiKey = '';
+        let groqApiKey = '';
         let currentResult = null;
         let isAnalyzing = false;
         let video, canvas;
@@ -268,8 +268,8 @@
 
         // ── API Key ───────────────────────────────────────────────────────────
         function loadApiKey() {
-            geminiApiKey = localStorage.getItem('gemini_api_key') || '';
-            if (!geminiApiKey) {
+            groqApiKey = localStorage.getItem('groq_api_key') || '';
+            if (!groqApiKey) {
                 document.getElementById('api-key-banner').classList.remove('hidden');
             }
         }
@@ -277,8 +277,8 @@
         function saveApiKey() {
             const key = document.getElementById('api-key-input').value.trim();
             if (!key) return;
-            geminiApiKey = key;
-            localStorage.setItem('gemini_api_key', key);
+            groqApiKey = key;
+            localStorage.setItem('groq_api_key', key);
             document.getElementById('api-key-banner').classList.add('hidden');
             showToast('บันทึก API Key แล้ว ✅', 'success');
         }
@@ -324,11 +324,11 @@
             showToast(after > before ? t.levelUp : t.xpGain.replace('{n}', amount), 'success');
         }
 
-        // ── Gemini API ────────────────────────────────────────────────────────
-        const GEMINI_MODEL  = 'gemini-2.0-flash';
-        const RETRY_DELAYS  = [5, 10, 20]; // seconds between retries
+        // ── Groq API ──────────────────────────────────────────────────────────
+        const GROQ_MODEL   = 'meta-llama/llama-4-scout-17b-16e-instruct';
+        const RETRY_DELAYS = [15, 30, 60]; // seconds between retries
 
-        const GEMINI_PROMPT = `วิเคราะห์วัตถุในภาพนี้ว่าเป็นขยะประเภทใด ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น:
+        const GROQ_PROMPT = `วิเคราะห์วัตถุในภาพนี้ว่าเป็นขยะประเภทใด ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น:
 {
   "found": true หรือ false,
   "name_th": "ชื่อวัตถุภาษาไทย",
@@ -355,41 +355,48 @@
             el.innerText = i18n[currentLang].analyzing;
         }
 
-        async function classifyWithGemini(imageBase64, mimeType = 'image/jpeg') {
-            if (!geminiApiKey) {
+        async function classifyWithGroq(imageBase64, mimeType = 'image/jpeg') {
+            if (!groqApiKey) {
                 document.getElementById('api-key-banner').classList.remove('hidden');
                 showToast(i18n[currentLang].apiKeyMissing, 'error');
                 return null;
             }
 
             for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
-                const res = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [
-                                { inline_data: { mime_type: mimeType, data: imageBase64 } },
-                                { text: GEMINI_PROMPT }
-                            ]}],
-                            generationConfig: { response_mime_type: 'application/json' }
-                        })
-                    }
-                );
+                const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${groqApiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: GROQ_MODEL,
+                        response_format: { type: 'json_object' },
+                        messages: [{
+                            role: 'user',
+                            content: [
+                                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+                                { type: 'text', text: GROQ_PROMPT }
+                            ]
+                        }]
+                    })
+                });
 
                 if (res.status === 429 && attempt < RETRY_DELAYS.length) {
+                    const errBody = await res.json().catch(() => ({}));
+                    console.error('429 detail:', JSON.stringify(errBody));
                     await sleep(RETRY_DELAYS[attempt]);
                     continue;
                 }
 
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
+                    console.error('API error:', JSON.stringify(err));
                     throw new Error(err?.error?.message || `HTTP ${res.status}`);
                 }
 
                 const data = await res.json();
-                return JSON.parse(data.candidates[0].content.parts[0].text);
+                return JSON.parse(data.choices[0].message.content);
             }
 
             throw new Error('Rate limit — ลองใหม่อีกสักครู่');
@@ -480,7 +487,7 @@
             document.getElementById('bin-advice').innerText = '';
 
             try {
-                const result = await classifyWithGemini(base64, mimeType);
+                const result = await classifyWithGroq(base64, mimeType);
                 if (result) {
                     currentResult = result;
                     displayResult(result);
