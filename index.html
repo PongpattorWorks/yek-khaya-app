@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yek-Khaya AI & Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+    <style>
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .active-tab {
+            border-bottom: 4px solid #10b981;
+            color: #10b981;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+
+    <nav class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="flex max-w-md mx-auto">
+            <button onclick="openTab('ai-tab', this)" class="flex-1 py-4 font-bold active-tab">📸 สแกนขยะ</button>
+            <button onclick="openTab('game-tab', this)" class="flex-1 py-4 font-bold text-gray-500">🎮
+                เกมแยกขยะ</button>
+        </div>
+    </nav>
+
+    <main class="max-w-md mx-auto p-4">
+        <div id="ai-tab" class="tab-content active">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">ส่องกล้องไปที่ขยะ</h2>
+                <div id="video-holder"
+                    class="relative bg-gray-200 rounded-xl overflow-hidden aspect-square flex items-center justify-center">
+                    <p id="loading-msg">กำลังเตรียมกล้องและ AI...</p>
+                </div>
+                <div id="result-box" class="mt-4 p-4 rounded-xl text-center transition-all duration-300 bg-gray-100">
+                    <p class="text-sm text-gray-500 uppercase tracking-widest">AI ตรวจพบ:</p>
+                    <p id="label" class="text-2xl font-black text-gray-800">---</p>
+                    <p id="bin-advice" class="mt-2 font-bold text-lg"></p>
+                </div>
+            </div>
+        </div>
+
+        <div id="game-tab" class="tab-content">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
+                <h2 class="text-xl font-bold text-gray-800 mb-2">แยกให้ถูกถัง!</h2>
+                <p class="text-gray-500 mb-4">คะแนนของคุณ: <span id="score" class="font-bold text-green-600">0</span>
+                </p>
+                <div class="bg-gray-100 h-48 rounded-2xl mb-6 flex items-center justify-center text-6xl shadow-inner">
+                    <span id="game-emoji">🥤</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="playGame('yellow')"
+                        class="bg-yellow-400 text-white py-4 rounded-xl font-bold">เหลือง (รีไซเคิล)</button>
+                    <button onclick="playGame('green')" class="bg-green-500 text-white py-4 rounded-xl font-bold">เขียว
+                        (ขยะเปียก)</button>
+                    <button onclick="playGame('blue')" class="bg-blue-500 text-white py-4 rounded-xl font-bold">น้ำเงิน
+                        (ทั่วไป)</button>
+                    <button onclick="playGame('red')" class="bg-red-500 text-white py-4 rounded-xl font-bold">แดง
+                        (อันตราย)</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let classifier;
+        let video;
+        let isModelReady = false;
+
+        const binMapping = {
+            'banana': { name: 'ขยะเปียก', bg: 'bg-green-100', text: 'text-green-700' },
+            'bottle': { name: 'ขยะรีไซเคิล', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            'mug': { name: 'ขยะทั่วไป', bg: 'bg-blue-100', text: 'text-blue-700' },
+            'lighter': { name: 'ขยะอันตราย', bg: 'bg-red-100', text: 'text-red-700' },
+            'packet': { name: 'ขยะทั่วไป', bg: 'bg-blue-100', text: 'text-blue-700' }
+        };
+
+        function openTab(tabId, el) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(btn => {
+                btn.classList.remove('active-tab', 'text-gray-500');
+                btn.classList.add('text-gray-500');
+            });
+            document.getElementById(tabId).classList.add('active');
+            el.classList.add('active-tab');
+            el.classList.remove('text-gray-500');
+        }
+
+        async function setup() {
+            video = document.createElement('video');
+            video.setAttribute('autoplay', '');
+            video.setAttribute('muted', '');
+            video.setAttribute('playsinline', '');
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = stream;
+                document.getElementById('video-holder').innerHTML = '';
+                document.getElementById('video-holder').appendChild(video);
+
+                // โหลด Classifier
+                classifier = ml5.imageClassifier('MobileNet', video, modelReady);
+            } catch (err) {
+                document.getElementById('loading-msg').innerText = 'ไม่สามารถเข้าถึงกล้องได้';
+                console.error(err);
+            }
+        }
+
+        function modelReady() {
+            isModelReady = true;
+            const msg = document.getElementById('loading-msg');
+            if (msg) msg.style.display = 'none';
+            classifyVideo();
+        }
+
+        function classifyVideo() {
+            // ตรวจสอบว่า classifier พร้อมใช้งานหรือไม่
+            if (classifier && isModelReady) {
+                classifier.classify((err, results) => {
+                    if (err) {
+                        console.error(err);
+                    } else if (results && results.length > 0) {
+                        const label = results[0].label.toLowerCase();
+                        const labelElem = document.getElementById('label');
+                        if (labelElem) labelElem.innerText = label.split(',')[0];
+
+                        let found = false;
+                        for (let key in binMapping) {
+                            if (label.includes(key)) {
+                                updateUI(binMapping[key]);
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            const advice = document.getElementById('bin-advice');
+                            const box = document.getElementById('result-box');
+                            if (advice) advice.innerText = "กำลังวิเคราะห์...";
+                            if (box) box.className = "mt-4 p-4 rounded-xl text-center bg-gray-100 text-gray-400";
+                        }
+                    }
+                    // ใช้ requestAnimationFrame แทนการเรียกซ้อนกันตรงๆ เพื่อประสิทธิภาพ
+                    requestAnimationFrame(classifyVideo);
+                });
+            }
+        }
+
+        function updateUI(info) {
+            const box = document.getElementById('result-box');
+            const advice = document.getElementById('bin-advice');
+            if (box && advice) {
+                box.className = `mt-4 p-4 rounded-xl text-center ${info.bg} ${info.text}`;
+                advice.innerText = `ทิ้งลง: ถังสี${info.name}`;
+            }
+        }
+
+        // --- Mini Game Logic ---
+        const gameItems = [
+            { emoji: '🍎', bin: 'green' }, { emoji: '📰', bin: 'yellow' },
+            { emoji: '🔋', bin: 'red' }, { emoji: '🍟', bin: 'blue' },
+            { emoji: '🥤', bin: 'yellow' }
+        ];
+        let currentItem;
+        let score = 0;
+
+        function nextItem() {
+            currentItem = gameItems[Math.floor(Math.random() * gameItems.length)];
+            document.getElementById('game-emoji').innerText = currentItem.emoji;
+        }
+
+        function playGame(selectedColor) {
+            if (selectedColor === currentItem.bin) {
+                score++;
+                document.getElementById('score').innerText = score;
+                nextItem();
+            } else {
+                alert('ยังไม่ถูกนะ ลองใหม่!');
+            }
+        }
+
+        setup();
+        nextItem();
+    </script>
+</body>
+
+</html>
