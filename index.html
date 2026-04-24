@@ -267,7 +267,7 @@
 
         // ── API Key ───────────────────────────────────────────────────────────
         function loadApiKey() {
-            groqApiKey = localStorage.getItem('groq_api_key') || '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';
+            groqApiKey = localStorage.getItem('groq_api_key');
             if (!groqApiKey) {
                 document.getElementById('api-key-banner').classList.remove('hidden');
             }
